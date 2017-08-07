@@ -1,23 +1,36 @@
+// The basic code
 var makeFunctional = function(func) {
     return new Proxy (func, {
         get: function (target, name) {
-            if (name === "_")
-                return makeFunctional(function(...args) {
+            if (name === "_") {
+                return function(...args) {
                     return makeFunctional(function(x) {
                         return target(x, ...args);
                     });
-                });
-            if (!target.__proto__.hasOwnProperty(name) && window.hasOwnProperty(name))
+                };
+            }
+            if (!/^(?!\d)[\w$]+$/.test(name))
                 return target[name];
-            return makeFunctional(function(x) {
-                return window[name](func(x));
-            });
+            var existing;
+            try {
+                existing = eval(name);
+            } catch (e) { }
+            if (typeof existing === "function" && !target.__proto__.hasOwnProperty(name))
+                return makeFunctional((function(func, existing) {
+                    return function(x, ...args) {
+                        return existing(func(x), ...args);
+                    };
+                })(func, existing));
+            return target[name];
         }
     });
 };
 
+// Extra code to apply makeFunctional() to existing functions
 for (var key of Object.getOwnPropertyNames(window)) {
     if (!/Storage$|^Window$|^Object$/.test(key) && window[key] !== window && window[key] != null) {
+        
+        // Make existing prototype functions global
         if (window[key].hasOwnProperty("prototype")) {
             for (var key2 of Object.getOwnPropertyNames(window[key].prototype)) if (!/^__|constructor|propertyIsEnumerable/.test(key2)) try {
                 var func = window[key].prototype[key2];
@@ -46,6 +59,8 @@ for (var key of Object.getOwnPropertyNames(window)) {
                 }
             } catch (e) { }
         }
+        
+        // Map existing functions through makeFunctional()
         if (typeof window[key] === "function") {
             window[key] = makeFunctional(window[key]);
         }
